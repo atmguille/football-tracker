@@ -1,3 +1,6 @@
 [submodule "mmpose"]
 	path = mmpose
 	url = https://github.com/atmguille/mmpose_faster-inference
+[submodule "yolov7"]
+	path = yolov7
+	url = https://github.com/WongKinYiu/yolov7
