@@ -4,8 +4,6 @@ import numpy as np
 from models.experimental import attempt_load
 from utils.general import check_img_size, non_max_suppression, scale_coords
 from utils.datasets import letterbox
-from utils.plots import plot_one_box
-#from preprocessing import get_n_closest_players_ball
 
 @torch.no_grad()
 def get_model(weights_path='yolov7.pt', infer_size=640, device='cuda:0', half=True):
@@ -25,7 +23,6 @@ def get_model(weights_path='yolov7.pt', infer_size=640, device='cuda:0', half=Tr
 def _prepare_frames(frames, infer_size, infer_stride, device, half):
     # Resize and pad frames
     frames = np.array([letterbox(frame, new_shape=infer_size, stride=infer_stride)[0] for frame in frames])
-    #frames = np.ascontiguousarray(frames[..., ::-1].transpose(0, 3, 1, 2))  # BGR to RGB, BHWC to BCHW (TODO: check if it is faster in GPU)
 
     frames = torch.from_numpy(frames).permute(0, 3, 1, 2).to(device)
     frames = frames.half() if half else frames.float()
@@ -61,37 +58,5 @@ def detect(model, frames: np.ndarray, original_shape, infer_size, infer_stride, 
             ball_bboxes.append(pred[~people_idx, :4].cpu().numpy().astype(np.int16))
         else:
             ball_bboxes.append(np.array([]))
-
-    return people_bboxes, ball_bboxes
-
-
-@torch.no_grad()
-def detect_2(model, frames: np.ndarray, original_shape, infer_size, infer_stride, conf_thr=0.25, iou_thr=0.45, classes=[0, 32], half=True):
-    device = next(model.parameters()).device
-    # Prepare frames
-    frames = _prepare_frames(frames, infer_size, infer_stride, device, half)
-    frames_shape = frames.shape
-    # TODO: official script does warmup per image, but I think it's not necessary
-
-    # Inference
-    preds = model(frames, augment=False)[0]
-    del frames
-    # NMS
-    preds = non_max_suppression(preds, conf_thr, iou_thr, classes=classes, agnostic=False)
-
-    people_bboxes, ball_bboxes = [], []
-
-    for pred in preds:
-        pred[:, :4] = scale_coords(frames_shape[2:], pred[:, :4], original_shape).round()
-
-        ball_idx = pred[:, 5] == 0
-        if ball_idx.any():
-            ball_bboxes.append(pred[ball_idx, :4].cpu().numpy().astype(np.int16))
-        else:
-            ball_bboxes.append(np.array([]))
-        if not ball_idx.all():
-            people_bboxes.append(pred[~ball_idx, :4].cpu().numpy().astype(np.int16))
-        else:
-            people_bboxes.append(np.array([]))
 
     return people_bboxes, ball_bboxes
