@@ -1,0 +1,19 @@
+name: football-tracker
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - cudatoolkit=11.3
+  - opencv
+  - pandas
+  - requests
+  - tqdm
+  - pyyaml
+  - matplotlib
+  - seaborn
+  - scikit-image
+  - scikit-learn
+  - pytorch==1.12.1
+  - torchvision==0.13.0
+  - mmcv-full
+prefix: /home/kaggle/miniconda3/envs/football-tracker
