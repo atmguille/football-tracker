@@ -1,3 +1,4 @@
+import os
 import cv2
 import numpy as np
 import glob
@@ -46,6 +47,8 @@ if __name__ == '__main__':
     parser.add_argument('--print_time', action='store_true', help='Whether to print time taken for each part of the preprocessing for each video')
     args = parser.parse_args()
 
+    if not os.path.exists(args.dst_directory):
+        os.mkdir(args.dst_directory)
     
     video_paths_to_process = filter_already_processed_videos(args) if args.filter_processed_videos else glob.glob(f'{args.src_directory}/*.{args.video_format}')
     print(f'Processing {len(video_paths_to_process)} videos ...')
