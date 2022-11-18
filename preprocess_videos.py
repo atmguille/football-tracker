@@ -1,46 +1,64 @@
 import cv2
 import numpy as np
 import glob
+import tqdm
+import argparse
+
+import sys
+sys.path.append('./yolov7/')
+sys.path.append('./mmpose/')
+from apis import yolo_api, pose_api
+sys.path.append('./apis/')
+from apis import preprocessing_api
 
 
-import yolo_api
-import pose_api
-import preprocessing_api
+def filter_already_processed_videos(args):
+    video_paths_original = glob.glob(f'{args.src_directory}/*.{args.video_format}')
+    already_processed = glob.glob(f'{args.dst_directory}/*.avi')
+    already_processed = {path[len(f'{args.dst_directory}/'):-len('.avi')] for path in already_processed}
+    video_paths_to_process = [path for path in video_paths_original if path[len(f'{args.src_directory}/'):-len(f'.{args.video_format}')] not in already_processed]
 
-SRC_DIRECTORY = '../input/training_clips/original_short'
-DST_DIRECTORY = '../input/training_clips/preprocessed_short_with_players_zoom'
+    if len(video_paths_original) != len(video_paths_to_process):
+        print(f'Found {len(video_paths_original) - len(video_paths_to_process)} out of {len(video_paths_original)} videos already processed')
+    if len(video_paths_to_process) == 0:
+        print('All videos already processed!')
+        exit()
 
-LIST_VIDEOS_PATHS = glob.glob(f'{SRC_DIRECTORY}/*.avi')
-DEVICE = 'cuda:0'
-
-YOLO_RESOLUTION = 1280
-YOLO_BATCH_SIZE = 150
-POSE_BATCH_SIZE = 50
-N_PLAYERS_SKELETONS = 5
-UPDATE_RATE_CENTROIDS = 400
-WEIGHTS_PATH_YOLO = './yolov7/yolov7.pt'
-POSE_CONFIG_PATH = './mmpose/configs/body/2d_kpt_sview_rgb_img/topdown_heatmap/coco/mobilenetv2_coco_256x192.py'
-POSE_CHECKPOINT_PATH = './mmpose/checkpoints/mobilenetv2_coco_256x192-d1e58e7b_20200727.pth'
+    return video_paths_to_process
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--src_directory', type=str, required=True, help='Directory containing videos to process')
+    parser.add_argument('--dst_directory', type=str, required=True, help='Directory to save processed videos, in .avi format')
+    parser.add_argument('--video_format', type=str, required=False, default='mp4', help='Format of videos to process')
+    parser.add_argument('--device', type=str, required=False, default='cuda:0', help='Device to use for inference')
+    parser.add_argument('--yolo_resolution', type=int, required=False, default=1280, help='Resolution to use for YOLO inference')
+    parser.add_argument('--yolo_batch_size', type=int, required=False, default=100, help='Batch size of frames to use for YOLOv7 inference')
+    parser.add_argument('--pose_batch_size', type=int, required=False, default=50, help='Batch size of frames to use for pose inference')
+    parser.add_argument('--n_players_skeletons', type=int, required=False, default=5, help='Number of players closest to the ball to compute skeletons for, -1 for all players')
+    parser.add_argument('--yolo_checkpoint_path', type=str, required=False, default='./model_checkpoints/yolov7.pt', help='Path to YOLOv7 checkpoint')
+    parser.add_argument('--pose_checkpoint_path', type=str, required=False, default='./model_checkpoints/mobilenetv2_coco_256x192-d1e58e7b_20200727.pth', help='Path to pose checkpoint')
+    parser.add_argument('--pose_config_path', type=str, required=False, default='./mmpose/configs/body/2d_kpt_sview_rgb_img/topdown_heatmap/coco/mobilenetv2_coco_256x192.py', help='Path to pose config')
+    parser.add_argument('--filter_processed_videos', action='store_true', help='Whether to filter videos already processed stored in dst_directory')
+    parser.add_argument('--render_players', action='store_true', help='Whether to render players on top of the black background')
+    parser.add_argument('--zoom_ball', action='store_true', help='Whether to zoom on the ball')
+    parser.add_argument('--print_time', action='store_true', help='Whether to print time taken for each part of the preprocessing for each video')
+    args = parser.parse_args()
 
-    yolo_infer_size, yolo_infer_stride = None, None
-    yolo_model, yolo_infer_size, yolo_infer_stride = yolo_api.get_model(weights_path=WEIGHTS_PATH_YOLO, infer_size=YOLO_RESOLUTION, device=DEVICE)
+    
+    video_paths_to_process = filter_already_processed_videos(args) if args.filter_processed_videos else glob.glob(f'{args.src_directory}/*.{args.video_format}')
+    print(f'Processing {len(video_paths_to_process)} videos ...')
 
-    pose_model, pose_dataset_info = pose_api.get_model(pose_config=POSE_CONFIG_PATH, pose_checkpoint=POSE_CHECKPOINT_PATH, device=DEVICE)
+    yolo_model, yolo_infer_size, yolo_infer_stride = yolo_api.get_model(weights_path=args.yolo_checkpoint_path, infer_size=args.yolo_resolution, device=args.device)
+    pose_model, pose_dataset_info = pose_api.get_model(pose_config=args.pose_config_path, pose_checkpoint=args.pose_checkpoint_path, device=args.device)
 
-    # Filter videos already processed
-    already_processed = glob.glob(f'{DST_DIRECTORY}/*.avi')
-    already_processed = {path[len(f'{DST_DIRECTORY}/'):-len('.avi')] for path in already_processed}
-    list_videos_paths = [path for path in LIST_VIDEOS_PATHS if path[len(f'{SRC_DIRECTORY}/'):-len('.avi')] not in already_processed]
-
-    for video_name in list_videos_paths:
+    for video_name in tqdm.tqdm(video_paths_to_process):
         video_cap = cv2.VideoCapture(video_name)
-        num_frames = int(video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = int(video_cap.get(cv2.CAP_PROP_FPS))
+        original_frames = []
 
-        for _ in range(num_frames):
+        while True:
             ret, frame = video_cap.read()
             if not ret:
                 break
@@ -49,9 +67,9 @@ if __name__ == '__main__':
         original_frames = np.array(original_frames)
 
         preprocessed_frames = preprocessing_api.preprocess_frames(original_frames, yolo_model, yolo_infer_size, 
-                                                yolo_infer_stride, YOLO_BATCH_SIZE, N_PLAYERS_SKELETONS,
-                                                pose_model, pose_dataset_info, POSE_BATCH_SIZE, UPDATE_RATE_CENTROIDS, 
-                                                render_players=False, zoom_ball=False, print_time=False)
+                                                yolo_infer_stride, args.yolo_batch_size, args.n_players_skeletons,
+                                                pose_model, pose_dataset_info, args.pose_batch_size, 
+                                                render_players=args.render_players, zoom_ball=args.zoom_ball, print_time=args.print_time)
 
         # Convert back to BGR (only needed when storing the video. If the video is kept in memory, it can be kept in RGB)
         final_frames = np.empty_like(preprocessed_frames)
@@ -59,7 +77,7 @@ if __name__ == '__main__':
             final_frames[i] = cv2.cvtColor(preprocessed_frames[i], cv2.COLOR_RGB2BGR)
 
         fourcc = cv2.VideoWriter_fourcc(*'XVID')
-        dst_video_name = f'{DST_DIRECTORY}/{video_name[len(f"{SRC_DIRECTORY}/"):-len(".avi")]}.avi'
+        dst_video_name = f"{args.dst_directory}/{video_name[len(f'{args.src_directory}/'):-len(f'.{args.video_format}')]}.avi"
         out = cv2.VideoWriter(dst_video_name, fourcc, fps, final_frames[0].shape[:2][::-1])
 
         for frame in final_frames:
