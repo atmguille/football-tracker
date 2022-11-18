@@ -1,6 +1,9 @@
 import torch
 import numpy as np
 
+import sys
+sys.path.append('../yolov7/')
+
 from models.experimental import attempt_load
 from utils.general import check_img_size, non_max_suppression, scale_coords
 from utils.datasets import letterbox
