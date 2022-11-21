@@ -15,8 +15,8 @@ from apis import preprocessing_api
 
 def filter_already_processed_videos(args):
     video_paths_original = glob.glob(f'{args.src_directory}/*.{args.video_format}')
-    already_processed = glob.glob(f'{args.dst_directory}/*.avi')
-    already_processed = {path[len(f'{args.dst_directory}/'):-len('.avi')] for path in already_processed}
+    already_processed = glob.glob(f'{args.dst_directory}/*.mp4')
+    already_processed = {path[len(f'{args.dst_directory}/'):-len('.mp4')] for path in already_processed}
     video_paths_to_process = [path for path in video_paths_original if path[len(f'{args.src_directory}/'):-len(f'.{args.video_format}')] not in already_processed]
 
     if len(video_paths_original) != len(video_paths_to_process):
@@ -37,7 +37,7 @@ if __name__ == '__main__':
     parser.add_argument('--yolo_resolution', type=int, required=False, default=1280, help='Resolution to use for YOLO inference')
     parser.add_argument('--yolo_batch_size', type=int, required=False, default=100, help='Batch size of frames to use for YOLOv7 inference')
     parser.add_argument('--pose_batch_size', type=int, required=False, default=50, help='Batch size of frames to use for pose inference')
-    parser.add_argument('--n_players_skeletons', type=int, required=False, default=5, help='Number of players closest to the ball to compute skeletons for, -1 for all players')
+    parser.add_argument('--n_players_skeletons', type=int, required=False, default=-1, help='Number of players closest to the ball to compute skeletons for, -1 for all players. Less means faster inference')
     parser.add_argument('--yolo_checkpoint_path', type=str, required=False, default='./models_checkpoints/yolov7.pt', help='Path to YOLOv7 checkpoint')
     parser.add_argument('--pose_checkpoint_path', type=str, required=False, default='./models_checkpoints/mobilenetv2_coco_256x192-d1e58e7b_20200727.pth', help='Path to pose checkpoint')
     parser.add_argument('--pose_config_path', type=str, required=False, default='./mmpose/configs/body/2d_kpt_sview_rgb_img/topdown_heatmap/coco/mobilenetv2_coco_256x192.py', help='Path to pose config')
@@ -79,8 +79,8 @@ if __name__ == '__main__':
         for i in range(len(preprocessed_frames)):
             final_frames[i] = cv2.cvtColor(preprocessed_frames[i], cv2.COLOR_RGB2BGR)
 
-        fourcc = cv2.VideoWriter_fourcc(*'XVID')
-        dst_video_name = f"{args.dst_directory}/{video_name[len(f'{args.src_directory}/'):-len(f'.{args.video_format}')]}.avi"
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        dst_video_name = f"{args.dst_directory}/{video_name[len(f'{args.src_directory}/'):-len(f'.{args.video_format}')]}.mp4"
         out = cv2.VideoWriter(dst_video_name, fourcc, fps, final_frames[0].shape[:2][::-1])
 
         for frame in final_frames:
